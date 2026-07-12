@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Phase 0 bootstrap for a RunPod PyTorch pod (CUDA 12.x, Python 3.11/3.12).
+# Phase 0 bootstrap for a RunPod- or Vast.ai-style PyTorch pod
+# (CUDA 12.x/13.x, Python 3.10-3.13).
 #
 #   1. rsync/git-clone this repo onto the pod, cd into it
 #   2. export HF_TOKEN=hf_...   (account with starcoderdata terms accepted)
@@ -9,6 +10,16 @@
 # activations on Llama-2-7B — the two things that must work before spending
 # on the delta run (Phase 1) or the lens fit (Phase 2).
 set -euo pipefail
+
+# Vast.ai PyTorch images ship torch preinstalled in /venv/main (see the image's
+# /etc/vast-agents-guide.md). Activate it if present and not already active so we
+# install into the env that already has a Blackwell-compatible torch, rather than
+# a fresh system env. Harmless no-op on RunPod / other images.
+if [[ -z "${VIRTUAL_ENV:-}" && -f /venv/main/bin/activate ]]; then
+  echo "== activating /venv/main =="
+  # shellcheck disable=SC1091
+  source /venv/main/bin/activate
+fi
 
 echo "== python / torch sanity =="
 python - <<'PY'
@@ -22,7 +33,12 @@ print("python", sys.version.split()[0], "| torch", torch.__version__,
 PY
 
 echo "== install =="
-pip install --quiet -e ".[dev]" datasets matplotlib
+# Prefer uv (Vast images ship it and it's ~10x faster); fall back to pip.
+if command -v uv >/dev/null 2>&1; then
+  uv pip install --quiet -e ".[dev]" datasets matplotlib
+else
+  pip install --quiet -e ".[dev]" datasets matplotlib
+fi
 
 echo "== hf auth =="
 python - <<'PY'
