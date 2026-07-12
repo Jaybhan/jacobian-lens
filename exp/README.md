@@ -8,13 +8,24 @@ steering (IFT) but not skill acquisition (CPT).
 
 Phases (each gates the next; full plan in the session plan file):
 
-1. **δ screen** (`exp/delta/`, this directory — built): directional scatter of
-   per-example pullback vectors `dL/dh_l`, steering vs skill data. A null here
-   falsifies the hypothesis before any expensive work.
-2. **Lens fit** on Llama-2-7B via `jlens.fit` (only if δ splits).
-3. **Decompose** LoRA-TMLR-2024 adapter B-columns into the lens dictionary;
-   alignment-vs-depth (o_proj/down_proj only — the residual-frame modules).
-4. **Causal ablation**: zero the J-space write component, check reversion.
+1. **δ screen** (`exp/delta/` — built): directional scatter of per-example
+   pullback vectors `dL/dh_l`, steering vs skill data. A null here falsifies
+   the hypothesis before any expensive work.
+2. **Lens fit** (`exp/lens_fit/` — built; run only if δ splits): `run_fit.py`
+   fits the lens on WikiText (GPU, ~3-5h, resumable) with built-in acceptance
+   checks; `export_unembed.py` saves `unembed.pt` so later phases never need
+   the model. `scp lens.pt unembed.pt` off the pod (~1.3 GB total).
+3. **Decompose** (`exp/decompose/` — built; runs anywhere on CPU once
+   `lens.pt` + `unembed.pt` exist): SVD each adapter's ΔW per (layer, module)
+   — gauge-invariant write directions — and score them against the lens
+   dictionary (signed OMP primary; non-negative and top-k J-subspace
+   projection as checks) with a random floor and a wrong-layer null.
+   Residual-frame modules only (o_proj/down_proj — measured at ~25% of ΔW
+   energy on the real magicoder adapter; reported as `residual_coverage`).
+   `run_decompose.py` then `analyze.py` → `alignment_vs_depth.png` +
+   decoded-atoms report.
+4. **Causal ablation**: zero the J-space write component, check reversion
+   (not yet built).
 
 ## Running the δ screen (on a GPU pod)
 

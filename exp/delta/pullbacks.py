@@ -73,7 +73,7 @@ def pullbacks_for_example(
         ``[n_source_positions, d_model]`` fp32 (raw, un-normalized, on the
         layer's device) and ``source_positions`` indexes the sequence.
     """
-    input_ids = example.input_ids
+    input_ids = example.input_ids.to(model.input_device)
     seq_len = input_ids.shape[1]
     position_mask = valid_position_mask(seq_len, skip_first=skip_first)
     source_positions = position_mask.nonzero(as_tuple=True)[0]
@@ -96,9 +96,11 @@ def pullbacks_for_example(
         else:
             positions = example.loss_positions.nonzero(as_tuple=True)[0]
             logits = model.unembed(h_final).float()  # [1, seq, vocab]
-            targets = input_ids[0, positions + 1].to(logits.device)
+            targets = input_ids[0, (positions + 1).to(input_ids.device)]
             loss = F.cross_entropy(
-                logits[0, positions], targets, reduction="sum"
+                logits[0, positions.to(logits.device)],
+                targets.to(logits.device),
+                reduction="sum",
             )
 
         grads = torch.autograd.grad(loss, source_activations)
