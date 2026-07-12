@@ -118,6 +118,79 @@ def pullbacks_for_example(
     return pullbacks, source_positions, stats
 
 
+def pullbacks_for_example_multi(
+    model: LensModel,
+    example: PreparedExample,
+    layers: Sequence[int],
+    loss_fns: Sequence[Callable[[torch.Tensor], torch.Tensor]],
+    *,
+    skip_first: int = SKIP_FIRST_N_POSITIONS,
+) -> tuple[list[dict[int, torch.Tensor]], torch.Tensor, dict[str, float]]:
+    """Pullbacks for several scalar losses of ``h_final``: ONE forward, then
+    one ``torch.autograd.grad`` per loss (``retain_graph`` on all but the
+    last). Used by the fixed-cotangent δ-sketch, where each loss dots the
+    final residual against a shared probe vector.
+
+    Args:
+        model: The (frozen) model.
+        example: Tokenized example (its ``loss_positions`` are ignored here —
+            each ``loss_fn`` defines its own cotangent).
+        layers: Block indices to extract pullbacks at.
+        loss_fns: Non-empty sequence of maps from the final-layer residual
+            ``[1, seq, d]`` to a scalar, as in :func:`pullbacks_for_example`.
+        skip_first: Leading source positions to exclude, as in lens fitting.
+
+    Returns:
+        ``(per_loss, source_positions, stats)`` where ``per_loss[j][l]`` is
+        ``[n_source_positions, d_model]`` fp32 for loss ``j`` at layer ``l``,
+        and ``stats`` carries flat floats ``loss_0..loss_{P-1}``.
+    """
+    if not loss_fns:
+        raise ValueError("loss_fns must be non-empty")
+
+    input_ids = example.input_ids.to(model.input_device)
+    seq_len = input_ids.shape[1]
+    position_mask = valid_position_mask(seq_len, skip_first=skip_first)
+    source_positions = position_mask.nonzero(as_tuple=True)[0]
+    final_layer = model.n_layers - 1
+
+    per_loss: list[dict[int, torch.Tensor]] = []
+    losses: list[float] = []
+    with (
+        ActivationRecorder(
+            model.layers,
+            at=[*layers, final_layer],
+            start_graph_at=min(layers),
+        ) as recorder,
+        torch.enable_grad(),
+    ):
+        model.forward(input_ids)
+        h_final = recorder.activations[final_layer]
+        source_activations = [recorder.activations[l] for l in layers]
+
+        for j, loss_fn in enumerate(loss_fns):
+            loss = loss_fn(h_final)
+            grads = torch.autograd.grad(
+                loss, source_activations, retain_graph=j < len(loss_fns) - 1
+            )
+            per_loss.append(
+                {
+                    layer: grad[0, source_positions.to(grad.device), :].float()
+                    for layer, grad in zip(layers, grads, strict=True)
+                }
+            )
+            losses.append(float(loss.detach()))
+
+    stats: dict[str, float] = {
+        "seq_len": float(seq_len),
+        "n_targets": float(example.meta.get("n_targets", -1)),
+        "n_source_positions": float(len(source_positions)),
+    }
+    for j, loss_value in enumerate(losses):
+        stats[f"loss_{j}"] = loss_value
+    return per_loss, source_positions, stats
+
+
 class DeltaAccumulator:
     """Streaming per-layer accumulators over unit-normalized pullbacks."""
 
