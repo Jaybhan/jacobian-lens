@@ -106,8 +106,17 @@ def _cross_condition_angles(results: dict[str, dict], k: int = 25) -> dict[str, 
     # Each condition's basis is compared against every partner: compute the
     # O(d³) eigenbasis once per (condition, layer), not once per pairing.
     bases: dict[tuple[str, int], torch.Tensor] = {}
+    needed = {n for pair in (_STEERING, _SKILL) for n in pair if n in results}
+    total_bases = sum(len(results[n]["layers"]) for n in needed)
+    print(
+        f"cross-condition angles: {total_bases} eigenbases to compute "
+        f"({len(needed)} conditions x layers)",
+        flush=True,
+    )
+    done = 0
 
     def basis_for(name: str, layer: int) -> torch.Tensor:
+        nonlocal done
         key = (name, layer)
         if key not in bases:
             bases[key] = topk_basis(
@@ -115,6 +124,9 @@ def _cross_condition_angles(results: dict[str, dict], k: int = 25) -> dict[str, 
                 results[name]["_n_vectors"][layer],
                 k=k,
             )
+            done += 1
+            if done % 8 == 0 or done == total_bases:
+                print(f"  basis {done}/{total_bases}", flush=True)
         return bases[key]
 
     for a in _STEERING:
@@ -128,6 +140,7 @@ def _cross_condition_angles(results: dict[str, dict], k: int = 25) -> dict[str, 
                 )
                 per_layer[layer] = float(theta.median() * 180 / torch.pi)
             angles[f"{a}|{b}"] = per_layer
+            print(f"  finished pair {a}|{b}", flush=True)
     return angles
 
 
