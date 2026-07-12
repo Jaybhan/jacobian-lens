@@ -57,6 +57,20 @@ def second_moment_of(vectors: torch.Tensor) -> torch.Tensor:
     return v.T @ v
 
 
+def participation_ratio_from_moment(moment: torch.Tensor) -> float:
+    """PR straight from a second-moment matrix: ``trace(M)² / ‖M‖_F²``.
+
+    Identical to eigendecomposing first (``Σλ = tr M`` and
+    ``Σλ² = tr M² = ‖M‖_F²`` for symmetric ``M``) at O(d²) instead of
+    O(d³); the ``/n`` normalization cancels in the ratio.
+    """
+    m = moment.double()
+    total = float(m.trace())
+    if total <= 0:
+        raise ValueError("empty spectrum")
+    return total**2 / float((m * m).sum())
+
+
 def jackknife_participation_ratio(
     vectors: torch.Tensor,
     example_ids: torch.Tensor,
@@ -80,24 +94,36 @@ def jackknife_participation_ratio(
     shard = torch.tensor([shard_of_id[int(e)] for e in example_ids])
 
     full_moment = second_moment_of(vectors)
-    pr_full = participation_ratio(
-        spectrum_from_second_moment(full_moment, vectors.shape[0])
-    )
+    pr_full = participation_ratio_from_moment(full_moment)
     estimates = []
     for s in range(n_shards):
         keep = shard != s
-        n_kept = int(keep.sum())
-        if n_kept == 0:
+        if int(keep.sum()) == 0:
             continue
         moment = full_moment - second_moment_of(vectors[~keep])
-        estimates.append(
-            participation_ratio(spectrum_from_second_moment(moment, n_kept))
-        )
+        estimates.append(participation_ratio_from_moment(moment))
     estimates_t = torch.tensor(estimates, dtype=torch.float64)
     n = len(estimates_t)
     # Jackknife SE over leave-one-shard-out estimates.
     se = float(((n - 1) / n * ((estimates_t - estimates_t.mean()) ** 2).sum()).sqrt())
     return pr_full, se
+
+
+def topk_basis(moment: torch.Tensor, n: int, *, k: int = 25) -> torch.Tensor:
+    """Top-``k`` eigenbasis of a second-moment matrix (the O(d³) step,
+    exposed separately so callers comparing one basis against several
+    others can compute it once)."""
+    eigvals, eigvecs = torch.linalg.eigh(moment.double() / n)
+    return eigvecs[:, -k:]  # ascending order -> last k are largest
+
+
+def principal_angles_between(
+    basis_a: torch.Tensor, basis_b: torch.Tensor
+) -> torch.Tensor:
+    """Principal angles (radians, ascending) between two orthonormal bases.
+    0 = shared subspace, π/2 = orthogonal."""
+    singular = torch.linalg.svdvals(basis_a.T @ basis_b).clamp(-1.0, 1.0)
+    return singular.acos().flip(0)
 
 
 def principal_angles(
@@ -110,14 +136,9 @@ def principal_angles(
 ) -> torch.Tensor:
     """Principal angles (radians, ascending) between the top-``k`` eigenspaces
     of two second-moment matrices. 0 = shared subspace, π/2 = orthogonal."""
-    def topk_basis(moment: torch.Tensor, n: int) -> torch.Tensor:
-        eigvals, eigvecs = torch.linalg.eigh(moment.double() / n)
-        return eigvecs[:, -k:]  # ascending order -> last k are largest
-
-    basis_a = topk_basis(moment_a, n_a)
-    basis_b = topk_basis(moment_b, n_b)
-    singular = torch.linalg.svdvals(basis_a.T @ basis_b).clamp(-1.0, 1.0)
-    return singular.acos().flip(0)
+    return principal_angles_between(
+        topk_basis(moment_a, n_a, k=k), topk_basis(moment_b, n_b, k=k)
+    )
 
 
 def random_baseline_pr(

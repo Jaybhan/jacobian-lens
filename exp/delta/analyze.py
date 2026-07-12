@@ -26,9 +26,10 @@ from exp.delta.metrics import (
     jackknife_participation_ratio,
     mean_direction_norm,
     participation_ratio,
-    principal_angles,
+    principal_angles_between,
     random_baseline_pr,
     spectrum_from_second_moment,
+    topk_basis,
     topk_energy_fractions,
 )
 
@@ -102,18 +103,28 @@ def _cross_condition_angles(results: dict[str, dict], k: int = 25) -> dict[str, 
     """Median principal angle (degrees) between top-k pullback subspaces for
     each steering x skill pair, per layer."""
     angles: dict[str, Any] = {}
+    # Each condition's basis is compared against every partner: compute the
+    # O(d³) eigenbasis once per (condition, layer), not once per pairing.
+    bases: dict[tuple[str, int], torch.Tensor] = {}
+
+    def basis_for(name: str, layer: int) -> torch.Tensor:
+        key = (name, layer)
+        if key not in bases:
+            bases[key] = topk_basis(
+                results[name]["_second_moment"][layer],
+                results[name]["_n_vectors"][layer],
+                k=k,
+            )
+        return bases[key]
+
     for a in _STEERING:
         for b in _SKILL:
             if a not in results or b not in results:
                 continue
             per_layer = {}
             for layer in results[a]["layers"]:
-                theta = principal_angles(
-                    results[a]["_second_moment"][layer],
-                    results[a]["_n_vectors"][layer],
-                    results[b]["_second_moment"][layer],
-                    results[b]["_n_vectors"][layer],
-                    k=k,
+                theta = principal_angles_between(
+                    basis_for(a, layer), basis_for(b, layer)
                 )
                 per_layer[layer] = float(theta.median() * 180 / torch.pi)
             angles[f"{a}|{b}"] = per_layer
@@ -204,7 +215,8 @@ def main() -> None:
     if not paths:
         raise SystemExit(f"no .pt accumulators found in {args.dir}")
     results = {}
-    for path in paths:
+    for i, path in enumerate(paths):
+        print(f"[{i + 1}/{len(paths)}] analyzing {os.path.basename(path)}", flush=True)
         result = analyze_condition(path)
         results[result["condition"]] = result
 
@@ -226,6 +238,7 @@ def main() -> None:
         )
         print(f"{name:<22} {row}")
 
+    print("computing cross-condition angles...", flush=True)
     summary = {
         "baseline_pr": baseline_pr,
         "baseline_n": n_reference,
