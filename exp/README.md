@@ -24,6 +24,15 @@ Phases (each gates the next; full plan in the session plan file):
    energy on the real magicoder adapter; reported as `residual_coverage`).
    `run_decompose.py` then `analyze.py` → `alignment_vs_depth.png` +
    decoded-atoms report.
+3b. **Positive control** (`exp/decompose/control.py` + `run_control.py`):
+   decompose the top eigendirections of the Phase-1 pullback second moments
+   through the *identical* dictionary/OMP path. These directions are the
+   Lemma-2 span the theory confines B to, so: control high + adapters at
+   floor → the Phase-3 null is real (adapters left the J-frame, e.g. AdamW);
+   control at floor too → the lens dictionary lacks resolving power and the
+   Phase-3 null is uninformative. Needs `out/delta/*.pt` + `lens.pt` +
+   `unembed.pt`; CPU.
+
 4. **Causal ablation**: zero the J-space write component, check reversion
    (not yet built).
 

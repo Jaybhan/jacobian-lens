@@ -114,7 +114,8 @@ class AdapterWrites:
         """
         per_module = dict.fromkeys(ALL_MODULES, 0.0)
         for (_, module), mw in self.writes.items():
-            per_module[module] += mw.energy
+            # .get: tolerate synthetic module names (exp.decompose.control).
+            per_module[module] = per_module.get(module, 0.0) + mw.energy
         total = sum(per_module.values())
         return {m: e / total for m, e in per_module.items() if e > 0}
 
