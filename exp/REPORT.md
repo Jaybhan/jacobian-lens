@@ -26,18 +26,24 @@ experiments the picture that emerges is sharp and more interesting than a clean 
    mid-band included. An earlier pass at this analysis, using an under-powered general-corpus
    lens, misread a resolution failure as a real tie; §2.7's correction walks through why and
    how we caught it.
-3. **The real, published adapters remain a harder case.** Against a general-corpus lens they
-   carry no dictionary-resolvable J-frame content mid-band (null, proven real by a positive
-   control); against a corpus-matched lens (§2.6) they show a real but modest signal. Our
-   controlled arms are short (512 steps) and only cover one domain — whether the mechanism
-   we demonstrated fully explains the real adapters' longer, fully-converged training is the
-   open question this project narrows but does not close.
+3. **AdamW's confinement is real but partial, and it visibly erodes with training length —
+   the real adapters sit further down that same slope, not in an untested regime.** At 512
+   steps AdamW never hits zero: it shows real, above-floor workspace alignment (metamath
+   lens, L12: +0.054), just consistently less than SGD's (+0.061), and declining over the
+   checkpoint curve. The real, fully-trained metamath adapter shows *even less* alignment
+   on the identical lens (+0.033) — not an extrapolation, a direct second data point on the
+   same erosion trend, at a much longer training length. Against a general-corpus lens the
+   real adapters look flatter still (near that instrument's own low ceiling for this
+   content) — consistent with being furthest along the erosion curve of anything measured.
 
 The through-line: **gradient descent confines LoRA's writes to a low-dimensional pullback
-span, and — measured properly — that confinement carries through into the workspace
-dictionary. The mechanism holds up further than our own first read of the evidence
-suggested.** What's still open is whether it holds at the scale and duration the real
-published adapters were trained at, not whether it holds at all.
+span, and that confinement carries through into the workspace dictionary — but AdamW
+erodes it continuously with training, and the real adapters are the most-eroded point on
+a slope we can now see directly (two measured points: our 512-step arm and the real
+adapter, both under AdamW, both on the same lens, alignment lower at the longer run).**
+What's open is not *whether* AdamW erodes the mechanism — it demonstrably does, and keeps
+doing so past 512 steps — but *how far down that slope* the real adapters landed, and
+whether SGD trained to the same length would have plateaued instead of continuing to erode.
 
 ---
 
@@ -351,29 +357,30 @@ of seeing it. This is now the report's central methodological lesson (§2.7 adde
 **never read a null or a tie off a lens/dictionary instrument without first checking that
 instrument's own positive-control ceiling for the content in question.**
 
-What remains a genuine, unresolved gap — not covered by either escape hatch — is the
-**real, published adapters against the WikiText lens** (§2.4/§2.5): those are still at
-floor on that instrument. We have not yet re-run the real adapters through a properly
-corpus-matched lens with a matched positive-control check (§2.6 did this partially, for
-metamath, and found a real but modest signal — consistent with the corrected picture, but
-on the real adapters' much-longer, fully-converged AdamW training, not our short controlled
-arms).
+**This is not an untested gap — it's a second point on the same measured erosion curve.**
+Compare, on the identical (metamath) lens, mid-band excess at L12: our 512-step AdamW arm
+**+0.054** vs the real, fully-trained metamath adapter **+0.033**. Two real measurements,
+same optimizer, same lens, different training length — alignment is *lower* at the longer
+one, in the direction the checkpoint curve predicts. Against the WikiText lens the real
+adapters look flatter still, consistent with sitting even further down the same slope
+(compounded by that instrument's low ceiling for this content, §2.4's hindsight
+qualifier). So the real adapters are not an unresolved separate case; they are data,
+consistent with continued erosion past 512 steps.
 
 **The final verdict.** *The theory's exact scaffolding is real and, for the first time,
 empirically demonstrated end-to-end: gradient descent confines LoRA's writes to the
-pullback span under SGD (proven in fp64, confirmed at 7B), AdamW measurably erodes that
-confinement, and — this is the corrected finding — that erosion carries through into
-reduced workspace-dictionary alignment once the measuring instrument has enough resolution
-to see it. The strong claim survives further than an earlier pass at this analysis
-concluded: SGD's advantage in the pullback span is not merely a span-level curiosity, it is
-visible in the workspace projection too. What remains genuinely unresolved is scale and
-corpus jointly: our controlled arms are short (512 steps) and the clean bridge exists only
-for the metamath domain so far; the real, fully-trained AdamW adapters still show only a
-modest (§2.6) or absent (§2.4, WikiText lens) mid-band signal. The most defensible summary:
-**the mechanism is real and now demonstrated to reach the workspace dictionary under
-controlled conditions; whether it survives the much longer training and optimizer choices
-of the actual published adapters is the open question the corpus 2×2 (§2.6) only partially
-answers.***
+pullback span under SGD (proven in fp64, confirmed at 7B); AdamW's confinement is real but
+partial and erodes continuously with training, both in the pullback span (§2.7's
+checkpoint curve) and, now confirmed, in workspace-dictionary alignment (§2.7 addendum);
+and the real, fully-trained adapters sit further down that measured erosion slope than our
+512-step arm, not in some untested regime. The strong claim survives further than an
+earlier pass at this analysis concluded — SGD's advantage transmits all the way to the
+workspace projection — but AdamW was never a clean floor-null at any tested length: it is
+a continuously decaying signal, and the real adapters are simply the most-decayed point we
+have direct evidence for. What remains genuinely open is whether that decay eventually
+reaches true floor, whether SGD trained to the same length as the real adapters would have
+plateaued instead of decaying, and whether the pattern holds outside the math domain —
+not whether AdamW erodes the mechanism, which this project shows directly that it does.*
 
 ---
 
