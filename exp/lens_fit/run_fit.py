@@ -1,9 +1,15 @@
-"""CLI: fit the J-lens on the base model over WikiText (Phase 2; GPU, hours).
+"""CLI: fit the J-lens on the base model (Phase 2; GPU, hours).
 
     python -m exp.lens_fit.run_fit \
         --model NousResearch/Llama-2-7b-hf \
         --n-prompts 100 --dim-batch 16 \
         --checkpoint /workspace/lens_ckpt.pt --out out/lens/lens.pt
+
+Default corpus is WikiText (general). ``--corpus metamath`` refits on-
+distribution (MetaMathQA, Alpaca-formatted as exp.delta's math-ift condition)
+— the follow-up that separates "the workspace theory is wrong" from "the
+WikiText-fitted lens is pointed at the wrong subspace to see it." Use a
+different --checkpoint/--out per corpus; they are not interchangeable.
 
 Resumable: rerunning with the same --checkpoint continues where it stopped
 (jlens.fit checkpoints every prompt, atomically). Ends with two acceptance
@@ -21,6 +27,7 @@ import os
 import torch
 
 import jlens
+from exp.lens_fit.math_prompts import load_metamath_prompts
 from jlens.examples import load_wikitext_prompts
 
 logger = logging.getLogger(__name__)
@@ -87,14 +94,22 @@ def main() -> None:
         "--source-layers", type=int, nargs="*", default=None,
         help="Default: every layer below the final one.",
     )
+    parser.add_argument(
+        "--corpus", default="wikitext", choices=["wikitext", "metamath"],
+        help="wikitext: general corpus (original Phase 2). metamath: "
+        "on-distribution refit for the decompose-null follow-up.",
+    )
     args = parser.parse_args()
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     os.makedirs(os.path.dirname(args.checkpoint) or ".", exist_ok=True)
 
     model = load_model(args.model, args.device)
     logger.info("%s", model)
-    prompts = load_wikitext_prompts(args.n_prompts)
-    logger.info("fitting on %d WikiText prompts", len(prompts))
+    if args.corpus == "metamath":
+        prompts = load_metamath_prompts(args.n_prompts)
+    else:
+        prompts = load_wikitext_prompts(args.n_prompts)
+    logger.info("fitting on %d %s prompts", len(prompts), args.corpus)
 
     lens = jlens.fit(
         model,
