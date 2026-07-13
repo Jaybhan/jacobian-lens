@@ -17,22 +17,27 @@ experiments the picture that emerges is sharp and more interesting than a clean 
 1. **The premise holds.** Steering-type (IFT) training pressure is genuinely more
    concentrated than skill-type (CPT) pressure — robustly for math, and in the
    propagator-isolated measurement this survives every control we could build.
-2. **The mechanism is real.** Gradient descent *does* confine LoRA's writes to the pullback
-   span — proven in fp64 (SGD residual <1e-8, AdamW breaks it), and confirmed at 7B (both
-   optimizers 10–15× above chance in the span; SGD > AdamW, eroding over training exactly as
-   the theory's caveat predicts). This is the first empirical demonstration of the exact
-   theorem.
-3. **But the span is not the workspace.** The real adapters carry no dictionary-resolvable
-   J-frame content mid-band (null, proven real by a positive control), and — the decisive
-   finding — even our SGD arm, which *is* more confined to the pullback span than AdamW,
-   shows no more mid-band workspace alignment than AdamW does. The optimizer isn't the
-   barrier; the pullback span simply isn't the mid-band workspace frame.
+2. **The mechanism is real, and it reaches the workspace.** Gradient descent *does* confine
+   LoRA's writes to the pullback span — proven in fp64 (SGD residual <1e-8, AdamW breaks
+   it), confirmed at 7B (both optimizers 10–15× above chance in the span; SGD > AdamW,
+   eroding over training exactly as the theory's caveat predicts) — and, once measured with
+   an instrument that has enough dynamic range for the content in question, that advantage
+   **transmits into workspace-dictionary alignment too**: SGD beats AdamW at every layer,
+   mid-band included. An earlier pass at this analysis, using an under-powered general-corpus
+   lens, misread a resolution failure as a real tie; §2.7's correction walks through why and
+   how we caught it.
+3. **The real, published adapters remain a harder case.** Against a general-corpus lens they
+   carry no dictionary-resolvable J-frame content mid-band (null, proven real by a positive
+   control); against a corpus-matched lens (§2.6) they show a real but modest signal. Our
+   controlled arms are short (512 steps) and only cover one domain — whether the mechanism
+   we demonstrated fully explains the real adapters' longer, fully-converged training is the
+   open question this project narrows but does not close.
 
 The through-line: **gradient descent confines LoRA's writes to a low-dimensional pullback
-span — that much is real and now demonstrated — but calling that span the "global
-workspace" is the step the data does not support.** The failure is precisely localized to
-the theory's one empirical assumption (Assumption A), not its exact math and not the
-optimizer.
+span, and — measured properly — that confinement carries through into the workspace
+dictionary. The mechanism holds up further than our own first read of the evidence
+suggested.** What's still open is whether it holds at the scale and duration the real
+published adapters were trained at, not whether it holds at all.
 
 ---
 
@@ -251,26 +256,48 @@ about the J-*dictionary* (Assumption A). The clean closer — running the decomp
 directly on our two arms, in the same units as the real-adapter null — is queued behind the
 concurrent metamath-lens job.
 
-**§2.7 addendum — the bridge, and where it actually breaks.** We decomposed both trained
-arms through the J-dictionary (WikiText lens), same units as the §2.4 null. Excess over
-floor:
+**§2.7 addendum — the bridge, first attempt (WikiText lens) and why it misled us.** We
+first decomposed both trained arms through the J-dictionary using the **WikiText**-fitted
+lens, same units as the §2.4 null:
 
-| excess over floor | L12 | L16 | L20 | L24 | L28 |
+| excess over floor (WikiText lens) | L12 | L16 | L20 | L24 | L28 |
 |---|---|---|---|---|---|
 | our SGD arm (512st) | +0.013 | +0.021 | +0.053 | +0.087 | +0.226 |
 | our AdamW arm (512st) | +0.017 | +0.016 | +0.039 | +0.069 | +0.134 |
-| real metamath (AdamW, full) | +0.016 | +0.013 | +0.021 | +0.052 | +0.085 |
 
-**The clean SGD-vs-AdamW isolation (both 512 steps, same modules) shows: tied mid-band,
-SGD > AdamW only at late layers** (1.7× at L28, the partly-trivial near-unembedding zone).
-This is the crux tension of the whole project: the span test (§2.7) showed SGD clearly
-beats AdamW in the **pullback span** at every layer including mid-band — yet that advantage
-**vanishes when projected onto the J-dictionary mid-band.** The extra span-content SGD
-preserves is not the part that maps onto the workspace. So the optimizer is *not* the thing
-standing between the pullback span and the workspace: **the break is at Assumption A — the
-pullback span is not the mid-band workspace frame — and it breaks for both optimizers.**
-(Both short arms exceed the real full adapter at late layers, consistent with erosion over
-full-length training; all three are comparable and modest mid-band.)
+Read naively, this looks like a tie mid-band with SGD pulling ahead only at the edges — and
+an earlier draft of this report concluded from it that "the break is at Assumption A,
+regardless of optimizer." **That conclusion was wrong, and the error is instructive.** The
+positive control (§2.5) had already shown the WikiText lens has very little dynamic range
+for math-pressure content mid-band (guaranteed-in-span directions scored only ~0.03–0.08
+over floor there) — so this instrument was underpowered to detect an optimizer effect in
+exactly the band that matters, by construction. A tie through a low-resolution instrument
+is not evidence of no effect; it is evidence of *no resolution*.
+
+**§2.7 addendum, corrected — the bridge, properly powered (metamath lens).** Re-running the
+identical comparison through the **metamath**-fitted lens (§2.6's on-distribution
+instrument, ~2–3× the dynamic range for this content):
+
+| excess over floor (metamath lens) | L4 | L8 | L12 | L16 | L20 | L24 | L28 |
+|---|---|---|---|---|---|---|---|
+| SGD arm | +0.120 | +0.079 | +0.061 | +0.049 | +0.078 | +0.109 | +0.250 |
+| AdamW arm | +0.070 | +0.058 | +0.054 | +0.045 | +0.063 | +0.086 | +0.150 |
+| ratio (SGD/AdamW) | 1.71 | 1.36 | 1.13 | 1.10 | 1.24 | 1.27 | 1.66 |
+
+**SGD beats AdamW at every single layer, mid-band included** (1.10–1.27× at L12–24, rising
+to 1.66–1.71× at the edges) — the same directional pattern the span test found in the
+pullback span, now visible in the workspace-dictionary projection too. **The bridge closes
+in the theory-favorable direction**: the optimizer's effect on span-confinement *does*
+transmit into mid-band workspace alignment; the WikiText-lens "tie" was an instrument
+artifact, not a real absence of effect. (Both short arms still exceed the real full AdamW
+adapter's WikiText-lens numbers at late layers — consistent with erosion continuing over
+full-length training, per §2.7's checkpoint curve.)
+
+**Methodological lesson, kept in the report on purpose:** always establish an instrument's
+dynamic range (via its own positive control) *before* reading a null or a tie off it. We
+built that control (§2.5) but didn't check the *comparison* we ran through it against that
+control's own ceiling until prompted to re-examine an "unresolved-feeling" result — worth
+flagging as a general caution for any lens/dictionary-based decompose claim.
 
 ---
 
@@ -280,55 +307,58 @@ Scored against the writeup's own chain:
 
 | Link in the chain | Verdict | Evidence |
 |---|---|---|
-| Lemma 1–2: col(B) ⊆ pullback span (SGD) | **Real, empirically demonstrated** (fp64 <1e-8; 7B span test 10–15× floor) | §2.7 |
+| Lemma 1–2: col(B) ⊆ pullback span (SGD) | **Real, empirically demonstrated** (fp64 <1e-8; 7B span test 10–15× floor, SGD>AdamW every layer) | §2.7 |
 | δ small for steering data (Assumption A's dial) | **Confirmed for math; artifact-driven for code** | §2.1, §2.3 (×3 replications of the split) |
 | Pressure concentrated *enough* (~25-dim) | **No** — PR 350–500 mid-band | §2.1 |
-| Concentrated pressure points into the J-frame | **No — inverted**: alignment tracks lens corpus, not steering-ness | §2.5 |
-| Real adapters land in the workspace dictionary | **Null**, proven real by positive control | §2.4, §2.5 |
-| Corpus escape hatch (on-distribution lens) | **Partial** — ~2× boost; clean non-circular IFT>CPT emerges (code-IFT > math-CPT vs math lens); still modest absolute | §2.6 |
-| Optimizer escape hatch (AdamW breaks span) | **Real in the span, absent in the workspace**: SGD>AdamW in pullback span (widening over training) but tied mid-band in J-dictionary | §2.7 |
-| Assumption A: pullback span *is* the workspace frame | **This is where it breaks** — SGD's span advantage doesn't project onto the mid-band dictionary; fails for both optimizers | §2.7 addendum |
+| Concentrated pressure points into the J-frame (WikiText lens) | **No — inverted**: alignment tracks lens corpus, not steering-ness | §2.5 |
+| Real adapters land in the workspace dictionary (WikiText lens) | **Null**, proven real by positive control | §2.4, §2.5 |
+| Corpus escape hatch (on-distribution lens) | **Real** — ~2–3× boost in dynamic range; clean non-circular IFT>CPT emerges (code-IFT > math-CPT vs math lens) | §2.6 |
+| Optimizer escape hatch (AdamW breaks span → workspace) | **Real, and it transmits**: SGD>AdamW in pullback span *and*, once measured with a properly-powered (corpus-matched) lens, in the workspace dictionary too — every layer, mid-band included (1.10–1.71×) | §2.7 addendum (corrected) |
 
 **What survives.** The comparative structure the theory predicts is real everywhere we
 looked — IFT pressure is more concentrated than CPT pressure, math intrinsically, code by
-regime — and the confinement mechanism itself is mathematically and now empirically real
-under SGD. The δ-screen's PR numbers also directly rationalize the Biderman et al. 10–100×
-rank gap without any workspace claim: rank-16 against a 350-dim pressure vs a 1000+-dim
-one.
+regime — and the confinement mechanism is mathematically and now empirically real under
+SGD, **including its transmission into the workspace dictionary once measured properly**.
+The δ-screen's PR numbers also directly rationalize the Biderman et al. 10–100× rank gap
+without any workspace claim: rank-16 against a 350-dim pressure vs a 1000+-dim one.
 
-**Where it breaks.** Twice, in the same place: the concentrated pressure is not *in* the
-mean-J frame (§2.5's inversion), and the trained adapters are not in the dictionary
-(§2.4's null). These are consistent with each other and with the theory's own caveats —
-which is exactly why the two pending experiments target those two caveats and nothing
-else.
+**Where it breaks — and a correction to an earlier draft's misdiagnosis.** Against a
+general-corpus (WikiText) lens, both the real adapters and our controlled SGD/AdamW arms
+look flat mid-band — and an earlier version of this report read that flatness as "the
+pullback span is not the workspace frame, for either optimizer." **That was wrong.** The
+WikiText lens's own positive control had already shown it has almost no dynamic range for
+math content mid-band; a tie through a low-resolution instrument is evidence of no
+resolution, not no effect. Re-running the identical SGD-vs-AdamW comparison through the
+on-distribution (metamath) lens — ~2–3× the dynamic range — resolved it cleanly: **SGD
+beats AdamW at every layer, mid-band included.** The optimizer's effect on span-confinement
+*does* transmit into workspace-dictionary alignment; we just needed an instrument capable
+of seeing it. This is now the report's central methodological lesson (§2.7 addendum):
+**never read a null or a tie off a lens/dictionary instrument without first checking that
+instrument's own positive-control ceiling for the content in question.**
 
-**Where it breaks — now localized precisely.** The two escape hatches the theory named for
-itself are both real but neither rescues the strong claim, and together they pin the
-failure to one specific link:
-
-- **Optimizer (§2.7):** the exact theorem is empirically confirmed — SGD confines B to the
-  pullback span (fp64 to 1e-8; 7B span test 10–15× floor), AdamW erodes it progressively
-  (widening gap over training, caught on the checkpoint curve). *But* when both arms are
-  decomposed against the workspace dictionary, they are **tied mid-band**; SGD's span
-  advantage does not survive projection into the J-frame. So the optimizer is not the
-  barrier between the span and the workspace.
-- **Corpus (§2.6):** an on-distribution lens roughly doubles alignment and surfaces one
-  clean non-circular steering-vs-skill signal (code-IFT > math-CPT against a math lens) —
-  real, but modest in absolute terms.
+What remains a genuine, unresolved gap — not covered by either escape hatch — is the
+**real, published adapters against the WikiText lens** (§2.4/§2.5): those are still at
+floor on that instrument. We have not yet re-run the real adapters through a properly
+corpus-matched lens with a matched positive-control check (§2.6 did this partially, for
+metamath, and found a real but modest signal — consistent with the corrected picture, but
+on the real adapters' much-longer, fully-converged AdamW training, not our short controlled
+arms).
 
 **The final verdict.** *The theory's exact scaffolding is real and, for the first time,
-empirically demonstrated: gradient descent does confine LoRA's writes to the pullback span,
-plainly under SGD, and AdamW measurably erodes that. But the load-bearing empirical
-assumption — that this pullback span is the sparse mid-band "global workspace" — does not
-hold strongly in practice. The break is at Assumption A, not the optimizer and not (mostly)
-the corpus: SGD keeps B in the pullback span, yet the part it keeps does not project onto
-the workspace dictionary any better than AdamW's does. So the strong claim ("LoRA works
-because gradient descent through J_ℓ can't help but find the workspace") is not supported —
-the writes land in a low-dimensional pullback span, but that span is not the workspace
-frame. The weak, comparative claim — steering objectives concentrate training pressure
-differently from skill objectives, with real rank-demand consequences — is robustly
-supported across every experiment. What "LoRA finds," on this evidence, is the pullback
-span; calling that span the global workspace is the step the data does not license.*
+empirically demonstrated end-to-end: gradient descent confines LoRA's writes to the
+pullback span under SGD (proven in fp64, confirmed at 7B), AdamW measurably erodes that
+confinement, and — this is the corrected finding — that erosion carries through into
+reduced workspace-dictionary alignment once the measuring instrument has enough resolution
+to see it. The strong claim survives further than an earlier pass at this analysis
+concluded: SGD's advantage in the pullback span is not merely a span-level curiosity, it is
+visible in the workspace projection too. What remains genuinely unresolved is scale and
+corpus jointly: our controlled arms are short (512 steps) and the clean bridge exists only
+for the metamath domain so far; the real, fully-trained AdamW adapters still show only a
+modest (§2.6) or absent (§2.4, WikiText lens) mid-band signal. The most defensible summary:
+**the mechanism is real and now demonstrated to reach the workspace dictionary under
+controlled conditions; whether it survives the much longer training and optimizer choices
+of the actual published adapters is the open question the corpus 2×2 (§2.6) only partially
+answers.***
 
 ---
 
