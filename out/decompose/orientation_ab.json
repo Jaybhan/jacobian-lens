@@ -1,0 +1,17 @@
+{
+ "description": "orientation A/B: metamath adapter signed-OMP@25 (S2-weighted mean over o_proj+down_proj) vs correct-J vs transposed-J dictionary. Correct must beat transposed if the frame is right.",
+ "layers": {
+  "8": {
+   "correct": 0.07308335968211127,
+   "transposed": 0.06345312632743151
+  },
+  "16": {
+   "correct": 0.09011074209042166,
+   "transposed": 0.07878570614839053
+  },
+  "24": {
+   "correct": 0.12837983998862124,
+   "transposed": 0.10496827361637405
+  }
+ }
+}
